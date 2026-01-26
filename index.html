@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Medical Facility Booking System</title>
+
+    <!-- Main styles -->
+    <link rel="stylesheet" href="./styles.css" />
+
+    <!-- View Transitions rule -->
+    <style>
+      @view-transition {
+        navigation: auto;
+      }
+    </style>
+
+    <!-- Tailwind (for utility classes, if used in CSS/JS) -->
+    <script src="https://cdn.tailwindcss.com" type="text/javascript"></script>
+
+    <!-- App logic -->
+    <script src="./app.js" defer></script>
+  </head>
+
+  <body>
+    <div id="app">
+      <!-- Public Booking View -->
+      <div id="publicView" style="display:none;">
+        <div class="container">
+          <div class="header">
+            <h1 id="clinicName">Medical Facility</h1>
+            <p id="clinicTagline">Your health, our priority</p>
+          </div>
+
+          <div class="main-content">
+            <!-- Public booking form -->
+            <div class="card">
+              <h2 id="bookingTitle">Book Your Appointment</h2>
+              <div id="successMessage" class="success-message"></div>
+              <div id="errorMessage" class="error-message"></div>
+
+              <form id="bookingForm">
+                <!-- Service -->
+                <div class="form-group">
+                  <label id="serviceLabel">Select Service</label>
+                  <select id="serviceSelect" required>
+                    <option value="">Choose a service...</option>
+                    <option value="stomatology">Stomatology</option>
+                    <option value="dermatology">Dermatology</option>
+                    <option value="solarium">Solarium</option>
+                  </select>
+                </div>
+
+                <!-- Public procedures (hidden until a service is chosen) -->
+                <div class="form-group" id="procedureGroupPublic" style="display: none;">
+                  <label>Procedure</label>
+                  <select id="procedureSelectPublic">
+                    <option value="">Choose a procedure...</option>
+                  </select>
+                </div>
+
+                <!-- Date -->
+                <div class="form-group">
+                  <label>Select Date</label>
+                  <input type="date" id="dateInput" required />
+                </div>
+
+                <!-- Time slots -->
+                <div class="form-group">
+                  <label>Available Time Slots</label>
+                  <div id="timeSlots" class="time-slots"></div>
+                </div>
+
+                <!-- Name -->
+                <div class="form-group">
+                  <label>Your Name</label>
+                  <input
+                    type="text"
+                    id="nameInput"
+                    placeholder="John Doe"
+                    required
+                  />
+                </div>
+
+                <!-- Email -->
+                <div class="form-group">
+                  <label>Email</label>
+                  <input
+                    type="email"
+                    id="emailInput"
+                    placeholder="john@example.com"
+                    required
+                  />
+                </div>
+
+                <!-- Phone -->
+                <div class="form-group">
+                  <label>Phone Number</label>
+                  <input
+                    type="tel"
+                    id="phoneInput"
+                    placeholder="+1234567890"
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  class="btn btn-primary"
+                  id="submitBtn"
+                >
+                  Book Appointment
+                </button>
+              </form>
+            </div>
+
+            <!-- Services card -->
+            <div class="card">
+              <h2>Our Services</h2>
+
+              <div style="margin-bottom: 20px;">
+                <h3 style="color: #14b8a6; margin: 0 0 8px 0;">Stomatology</h3>
+                <p style="color: #666666; margin: 0; line-height: 1.6;">
+                  Comprehensive dental care including checkups, cleanings, and treatments.
+                </p>
+              </div>
+
+              <div style="margin-bottom: 20px;">
+                <h3 style="color: #14b8a6; margin: 0 0 8px 0;">Dermatology</h3>
+                <p style="color: #666666; margin: 0; line-height: 1.6;">
+                  Expert skin care consultations and treatments for all skin conditions.
+                </p>
+              </div>
+
+              <div>
+                <h3 style="color: #14b8a6; margin: 0 0 8px 0;">Solarium</h3>
+                <p style="color: #666666; margin: 0; line-height: 1.6;">
+                  Safe and controlled tanning sessions with modern equipment.
+                </p>
+              </div>
+
+              <button
+                class="btn btn-primary"
+                style="margin-top: 20px; margin-right: 10px;"
+                onclick="showCustomerAuth()"
+              >
+                Customer Login
+              </button>
+              <button
+                class="btn btn-secondary"
+                style="margin-top: 20px;"
+                onclick="showAdminLogin()"
+              >
+                Staff Login
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Customer Authentication -->
+      <div id="customerAuth">
+        <div class="container">
+          <div class="card login-form">
+            <div class="nav-tabs" style="margin-bottom: 20px;">
+              <button class="nav-tab active" onclick="switchAuthTab('login')">
+                Login
+              </button>
+              <button class="nav-tab" onclick="switchAuthTab('register')">
+                Register
+              </button>
+            </div>
+
+            <!-- Customer Login -->
+            <div id="customerLogin">
+              <h2 style="text-align: center; color: #14b8a6;">Customer Login</h2>
+              <div id="customerLoginError" class="error-message"></div>
+              <form id="customerLoginForm">
+                <div class="form-group">
+                  <label>Email</label>
+                  <input
+                    type="email"
+                    id="customerEmail"
+                    placeholder="your@email.com"
+                    required
+                  />
+                </div>
+                <div class="form-group">
+                  <label>Password</label>
+                  <input
+                    type="password"
+                    id="customerPassword"
+                    placeholder="Enter password"
+                    required
+                  />
+                </div>
+                <button type="submit" class="btn btn-primary">Login</button>
+                <button type="button" class="btn btn-secondary" onclick="showCustomerAuth()">Back</button>
+              </form>
+            </div>
+
+            <!-- Customer Registration -->
+            <div id="customerRegister" style="display: none;">
+              <h2 style="text-align: center; color: #14b8a6;">Create Account</h2>
+              <div id="customerRegisterError" class="error-message"></div>
+              <div id="customerRegisterSuccess" class="success-message"></div>
+              <form id="customerRegisterForm">
+                <div class="form-group">
+                  <label>Full Name</label>
+                  <input
+                    type="text"
+                    id="registerName"
+                    placeholder="John Doe"
+                    required
+                  />
+                </div>
+                <div class="form-group">
+                  <label>Email</label>
+                  <input
+                    type="email"
+                    id="registerEmail"
+                    placeholder="your@email.com"
+                    required
+                  />
+                </div>
+                <div class="form-group">
+                  <label>Phone</label>
+                  <input
+                    type="tel"
+                    id="registerPhone"
+                    placeholder="+1234567890"
+                    required
+                  />
+                </div>
+                <div class="form-group">
+                  <label>Password</label>
+                  <input
+                    type="password"
+                    id="registerPassword"
+                    placeholder="Create password"
+                    required
+                  />
+                </div>
+                <button type="submit" class="btn btn-primary">
+                  Create Account
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="showCustomerAuth()">Back</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Admin Login -->
+      <div id="adminLogin" style="display: none;">
+        <div class="container">
+          <div class="card login-form">
+            <h2 style="text-align: center; color: #14b8a6;">Admin Login</h2>
+            <div id="loginError" class="error-message"></div>
+            <form id="loginForm">
+              <div class="form-group">
+                <label>Email</label>
+                <input
+                  type="email"
+                  id="adminUsername"
+                  placeholder="example@clinic.com"
+                  required
+                />
+              </div>
+              <div class="form-group">
+                <label>Password</label>
+                <input
+                  type="password"
+                  id="adminPassword"
+                  placeholder="Enter password"
+                  required
+                />
+              </div>
+              <button type="submit" class="btn btn-primary">Login</button>
+              <button type="button" class="btn btn-secondary" onclick="showCustomerAuth()">Back</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Customer Dashboard -->
+      <div id="customerDashboard" style="display: none;">
+        <div class="container">
+          <div class="header">
+            <h1 id="customerWelcome">My Appointments</h1>
+            <div
+              style="
+                display: flex;
+                gap: 10px;
+                justify-content: center;
+                flex-wrap: wrap;
+              "
+            >
+              <button
+                class="btn btn-primary"
+                onclick="showBookingForm()"
+                style="max-width: 200px;"
+              >
+                Book New Appointment
+              </button>
+              <button
+                class="btn btn-secondary"
+                onclick="customerLogout()"
+                style="max-width: 200px;"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Your Appointments</h2>
+            <div id="customerBookingsList" class="booking-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Customer Booking Form -->
+      <div id="customerBookingForm" style="display: none;">
+        <div class="container">
+          <div class="header">
+            <h1>Book New Appointment</h1>
+            <button
+              class="btn btn-secondary"
+              onclick="showCustomerDashboard()"
+              style="max-width: 200px; margin: 20px auto 0;"
+            >
+              Back to Dashboard
+            </button>
+          </div>
+
+          <div class="main-content">
+            <div class="card">
+              <h2 id="customerBookingTitle">Book Your Appointment</h2>
+              <div id="customerSuccessMessage" class="success-message"></div>
+              <div id="customerErrorMessage" class="error-message"></div>
+
+              <form id="customerBookingFormEl">
+                <div class="form-group">
+                  <label id="customerServiceLabel">Select Service</label>
+                  <select id="customerServiceSelect" required>
+                    <option value="">Choose a service...</option>
+                    <option value="dermatology">Dermatology</option>
+                    <option value="stomatology">Stomatology</option>
+                    <option value="solarium">Solarium</option>
+                  </select>
+                </div>
+
+                <div
+                  class="form-group"
+                  id="procedureGroup"
+                  style="display: none;"
+                >
+                  <label>Select Procedure</label>
+                  <select id="customerProcedureSelect" required>
+                    <option value="">Choose a procedure...</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label>Select Date</label>
+                  <input type="date" id="customerDateInput" required />
+                </div>
+
+                <div class="form-group">
+                  <label>Available Time Slots</label>
+                  <div id="customerTimeSlots" class="time-slots"></div>
+                </div>
+
+                <button
+                  type="submit"
+                  class="btn btn-primary"
+                  id="customerSubmitBtn"
+                >
+                  Book Appointment
+                </button>
+              </form>
+            </div>
+
+            <div class="card">
+              <h2>Service Information</h2>
+              <div id="serviceInfo">
+                <p
+                  style="
+                    color: #666666;
+                    text-align: center;
+                    padding: 20px;
+                  "
+                >
+                  Select a service to see available procedures
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Admin Dashboard -->
+      <div id="adminDashboard" style="display: none;">
+        <div class="container">
+          <div class="header">
+            <h1>Admin Dashboard</h1>
+            <button
+              class="btn btn-secondary"
+              onclick="logout()"
+              style="max-width: 200px; margin: 20px auto 0;"
+            >
+              Logout
+            </button>
+          </div>
+
+          <div class="card" style="margin-bottom: 20px;">
+            <h2>Statistics</h2>
+            <div
+              style="
+                display: grid;
+                grid-template-columns: repeat(
+                  auto-fit,
+                  minmax(200px, 1fr)
+                );
+                gap: 20px;
+                text-align: center;
+              "
+            >
+              <div style="background: #f0fdfa; padding: 20px; border-radius: 8px;">
+                <h3
+                  style="
+                    margin: 0;
+                    color: #14b8a6;
+                    font-size: 32px;
+                  "
+                  id="pendingCount"
+                >
+                  0
+                </h3>
+                <p style="margin: 5px 0 0 0; color: #666;">Pending</p>
+              </div>
+              <div style="background: #d1fae5; padding: 20px; border-radius: 8px;">
+                <h3
+                  style="
+                    margin: 0;
+                    color: #10b981;
+                    font-size: 32px;
+                  "
+                  id="approvedCount"
+                >
+                  0
+                </h3>
+                <p style="margin: 5px 0 0 0; color: #666;">Approved</p>
+              </div>
+              <div style="background: #f3f4f6; padding: 20px; border-radius: 8px;">
+                <h3
+                  style="
+                    margin: 0;
+                    color: #374151;
+                    font-size: 32px;
+                  "
+                  id="totalCount"
+                >
+                  0
+                </h3>
+                <p style="margin: 5px 0 0 0; color: #666;">
+                  Total Customers
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="nav-tabs">
+              <button
+                class="nav-tab active"
+                onclick="switchTab('pending')"
+              >
+                Pending
+              </button>
+              <button class="nav-tab" onclick="switchTab('confirmed')">
+                Approved
+              </button>
+              <button class="nav-tab" onclick="switchTab('all')">
+                All Bookings
+              </button>
+            </div>
+            <div id="bookingsList" class="booking-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Promotional Popup -->
+      <div id="promoPopup" class="promo-popup">
+        <div class="promo-content">
+          <button class="promo-close" onclick="closePromo()">×</button>
+          <h2 id="promoTitle">Special Offer!</h2>
+          <p id="promoMessage">
+            20% off dermatology consultations this month! Book now and take
+            care of your skin with our expert team.
+          </p>
+          <button class="btn btn-primary" onclick="closePromo()">
+            Book Now
+          </button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
