@@ -6,13 +6,6 @@
     <title>Medical Facility Booking System</title>
 
     <link rel="stylesheet" href="./styles.css" />
-
-    <style>
-      @view-transition {
-        navigation: auto;
-      }
-    </style>
-
     <script src="https://cdn.tailwindcss.com" type="text/javascript"></script>
     <script src="./app.js" defer></script>
   </head>
@@ -25,7 +18,7 @@
           <p id="clinicTagline">Your health, our priority</p>
         </div>
 
-        <!-- MAIN LANDING: Customer + Admin side-by-side -->
+        <!-- Landing: Customer + Admin -->
         <div
           class="main-content"
           style="
@@ -35,48 +28,32 @@
             align-items: start;
           "
         >
-          <!-- Customer Auth Card -->
+          <!-- Customer Auth -->
           <div class="card login-form" id="customerAuth">
             <h2 style="text-align: center; color: #14b8a6; margin-bottom: 10px;">
               Customer Portal
             </h2>
 
             <div class="nav-tabs" style="margin-bottom: 20px;">
-              <button class="nav-tab active" onclick="switchAuthTab('login')">
-                Login
-              </button>
-              <button class="nav-tab" onclick="switchAuthTab('register')">
-                Register
-              </button>
+              <button class="nav-tab active" onclick="switchAuthTab('login')">Login</button>
+              <button class="nav-tab" onclick="switchAuthTab('register')">Register</button>
             </div>
 
-            <!-- Customer Login -->
             <div id="customerLogin">
               <div id="customerLoginError" class="error-message"></div>
               <form id="customerLoginForm">
                 <div class="form-group">
                   <label>Email</label>
-                  <input
-                    type="email"
-                    id="customerEmail"
-                    placeholder="your@email.com"
-                    required
-                  />
+                  <input type="email" id="customerEmail" placeholder="your@email.com" required />
                 </div>
                 <div class="form-group">
                   <label>Password</label>
-                  <input
-                    type="password"
-                    id="customerPassword"
-                    placeholder="Enter password"
-                    required
-                  />
+                  <input type="password" id="customerPassword" placeholder="Enter password" required />
                 </div>
                 <button type="submit" class="btn btn-primary">Login</button>
               </form>
             </div>
 
-            <!-- Customer Register -->
             <div id="customerRegister" style="display: none;">
               <div id="customerRegisterError" class="error-message"></div>
               <div id="customerRegisterSuccess" class="success-message"></div>
@@ -84,52 +61,30 @@
               <form id="customerRegisterForm">
                 <div class="form-group">
                   <label>Full Name</label>
-                  <input
-                    type="text"
-                    id="registerName"
-                    placeholder="John Doe"
-                    required
-                  />
+                  <input type="text" id="registerName" placeholder="John Doe" required />
                 </div>
                 <div class="form-group">
                   <label>Email</label>
-                  <input
-                    type="email"
-                    id="registerEmail"
-                    placeholder="your@email.com"
-                    required
-                  />
+                  <input type="email" id="registerEmail" placeholder="your@email.com" required />
                 </div>
                 <div class="form-group">
                   <label>Phone</label>
-                  <input
-                    type="tel"
-                    id="registerPhone"
-                    placeholder="+1234567890"
-                    required
-                  />
+                  <input type="tel" id="registerPhone" placeholder="+1234567890" />
                 </div>
                 <div class="form-group">
                   <label>Password</label>
-                  <input
-                    type="password"
-                    id="registerPassword"
-                    placeholder="Create password"
-                    required
-                  />
+                  <input type="password" id="registerPassword" placeholder="Create password" required />
                 </div>
-                <button type="submit" class="btn btn-primary">
-                  Create Account
-                </button>
+                <button type="submit" class="btn btn-primary">Create Account</button>
               </form>
             </div>
 
             <p style="margin-top: 14px; color: #666; font-size: 13px;">
-              After login, you’ll be redirected to your dashboard.
+              After login you’ll be redirected to your dashboard.
             </p>
           </div>
 
-          <!-- Admin Login Card -->
+          <!-- Admin Login -->
           <div class="card login-form" id="adminLogin">
             <h2 style="text-align: center; color: #14b8a6; margin-bottom: 10px;">
               Staff Portal
@@ -140,51 +95,88 @@
             <form id="loginForm">
               <div class="form-group">
                 <label>Email</label>
-                <input
-                  type="email"
-                  id="adminUsername"
-                  placeholder="example@clinic.com"
-                  required
-                />
+                <input type="email" id="adminUsername" placeholder="example@clinic.com" required />
               </div>
-
               <div class="form-group">
                 <label>Password</label>
-                <input
-                  type="password"
-                  id="adminPassword"
-                  placeholder="Enter password"
-                  required
-                />
+                <input type="password" id="adminPassword" placeholder="Enter password" required />
               </div>
-
               <button type="submit" class="btn btn-primary">Login</button>
 
               <p style="margin-top: 14px; color: #666; font-size: 13px;">
-                Admin login is demo-only unless you add a backend.
+                Demo admin: Mary.mary@clinic.com / Dermadent123
               </p>
             </form>
           </div>
         </div>
 
-        <!-- Links / actions under -->
+        <!-- Guest booking -->
         <div class="card" style="margin-top: 20px;">
           <h2 style="margin-bottom: 10px;">Book as Guest</h2>
           <p style="color:#666; line-height:1.6; margin: 0 0 14px 0;">
-            If you don’t want to create an account, you can still book an appointment as a guest.
+            You can book without creating an account. A confirmation email will be sent.
           </p>
 
-          <a class="btn btn-secondary" href="./public.html" style="text-align:center; display:inline-block;">
-            Continue to Public Booking
-          </a>
+          <button class="btn btn-secondary" type="button" onclick="toggleGuestBooking()">
+            Toggle Guest Booking Form
+          </button>
 
-          <p style="margin-top: 12px; color: #666; font-size: 13px;">
-            (If you don’t have <code>public.html</code>, tell me and I’ll put the booking form back on this page instead.)
-          </p>
+          <div id="guestBookingSection" style="display:none; margin-top: 16px;">
+            <div id="successMessage" class="success-message"></div>
+            <div id="errorMessage" class="error-message"></div>
+
+            <form id="bookingForm">
+              <div class="form-group">
+                <label id="serviceLabel">Select Service</label>
+                <select id="serviceSelect" required>
+                  <option value="">Choose a service...</option>
+                  <option value="stomatology">Stomatology</option>
+                  <option value="dermatology">Dermatology</option>
+                  <option value="solarium">Solarium</option>
+                </select>
+              </div>
+
+              <div class="form-group" id="procedureGroupPublic" style="display:none;">
+                <label>Procedure</label>
+                <select id="procedureSelectPublic">
+                  <option value="">Choose a procedure...</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Select Date</label>
+                <input type="date" id="dateInput" required />
+              </div>
+
+              <div class="form-group">
+                <label>Available Time Slots</label>
+                <div id="timeSlots" class="time-slots"></div>
+              </div>
+
+              <div class="form-group">
+                <label>Your Name</label>
+                <input type="text" id="nameInput" placeholder="John Doe" required />
+              </div>
+
+              <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="emailInput" placeholder="john@example.com" required />
+              </div>
+
+              <div class="form-group">
+                <label>Phone Number</label>
+                <input type="tel" id="phoneInput" placeholder="+1234567890" />
+              </div>
+
+              <button type="submit" class="btn btn-primary" id="submitBtn">
+                Book Appointment
+              </button>
+            </form>
+          </div>
         </div>
       </div>
 
-      <!-- Promotional Popup (optional) -->
+      <!-- Promo popup -->
       <div id="promoPopup" class="promo-popup">
         <div class="promo-content">
           <button class="promo-close" onclick="closePromo()">×</button>
