@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Admin Portal - Medical Facility</title>
+    <title>Admin Dashboard - Medical Facility</title>
     <link rel="stylesheet" href="./styles.css" />
     <script src="https://cdn.tailwindcss.com" type="text/javascript"></script>
     <script src="./app.js" defer></script>
@@ -17,37 +17,13 @@
         </a>
       </div>
 
-      <!-- Admin Login (default) -->
-      <div id="adminLogin">
-        <div class="container">
-          <div class="card login-form">
-            <h2 style="text-align: center; color: #14b8a6;">Admin Login</h2>
-            <div id="loginError" class="error-message"></div>
-            <form id="loginForm">
-              <div class="form-group">
-                <label>Email</label>
-                <input type="email" id="adminUsername" placeholder="example@clinic.com" required />
-              </div>
-              <div class="form-group">
-                <label>Password</label>
-                <input type="password" id="adminPassword" placeholder="Enter password" required />
-              </div>
-              <button type="submit" class="btn btn-primary">Login</button>
-              <p style="margin-top:12px; color:#666; font-size:13px;">
-                Demo-only admin auth. For real security, use a backend.
-              </p>
-            </form>
-          </div>
-        </div>
-      </div>
-
-      <!-- Admin Dashboard -->
-      <div id="adminDashboard" style="display: none;">
+      <div id="adminDashboard">
         <div class="container">
           <div class="header">
             <h1>Admin Dashboard</h1>
-            <button class="btn btn-secondary" onclick="logout()">Logout</button>
-
+            <button class="btn btn-secondary" onclick="logout()" style="max-width:220px;">
+              Logout
+            </button>
           </div>
 
           <div class="card" style="margin-bottom: 20px;">
@@ -74,6 +50,7 @@
               <button class="nav-tab" onclick="switchTab('confirmed')">Approved</button>
               <button class="nav-tab" onclick="switchTab('all')">All Bookings</button>
             </div>
+
             <div id="bookingsList" class="booking-list"></div>
           </div>
         </div>
