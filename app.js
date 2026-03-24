@@ -1,9 +1,26 @@
-/* Medical Facility Booking — Multi-page (index/customer/admin) with localStorage persistence + email confirmation */
+/* Application logic for Medical Facility Booking — Option B
+   - index.html: Customer login/register + Admin login
+   - redirects to customer.html / admin.html after login
+   - persists customers/bookings in localStorage (demo mode)
+   - guards customer/admin pages
+   - keeps Netlify email confirmation call
+*/
 
 (() => {
   // ---------------------------
-  // Config
+  // Configuration & Static Data
   // ---------------------------
+  const defaultConfig = {
+    clinic_name: "Medical Facility",
+    clinic_tagline: "Your health, our priority",
+    booking_title: "Book Your Appointment",
+    service_label: "Select Service",
+    promo_title: "Special Offer!",
+    promo_message:
+      "20% off dermatology consultations this month! Book now and take care of your skin with our expert team.",
+  };
+
+  // DEMO ONLY (client-side credentials are insecure)
   const ADMIN_USERNAME = "Mary.mary@clinic.com";
   const ADMIN_PASSWORD = "Dermadent123";
 
@@ -47,97 +64,91 @@
   ];
 
   // ---------------------------
+  // LocalStorage (DEMO persistence)
+  // ---------------------------
+  const STORAGE = {
+    CUSTOMERS: "derma_booking_customers_v1",
+    BOOKINGS:  "derma_booking_bookings_v1",
+    SESSION:   "derma_booking_session_v1",
+  };
+
+  function readJSON(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  function writeJSON(key, value) {
+    localStorage.setItem(key, JSON.stringify(value));
+  }
+
+  function getSession()            { return readJSON(STORAGE.SESSION, null); }
+  function setSession(sessionObj)  { writeJSON(STORAGE.SESSION, sessionObj); }
+  function clearSession()          { localStorage.removeItem(STORAGE.SESSION); }
+
+  // ---------------------------
+  // Global State
+  // ---------------------------
+  let currentBookings  = [];
+  let currentCustomers = [];
+
+  let selectedTime             = null;
+  let customerSelectedTime     = null;
+  let editingCustomerBookingId = null;
+
+  let currentTab          = "pending";
+  let isLoggedIn          = false;
+  let isCustomerLoggedIn  = false;
+  let currentCustomer     = null;
+
+  // ---------------------------
   // Helpers
   // ---------------------------
-  const byId = (id) => document.getElementById(id);
-  const exists = (id) => !!byId(id);
+  function byId(id) { return document.getElementById(id); }
 
-  function showMessage(type, msg, elementId) {
+  function setText(id, val) {
+    const el = byId(id);
+    if (el) el.textContent = val;
+  }
+
+  function showSuccess(message, elementId = "successMessage") {
     const el = byId(elementId);
     if (!el) return;
-    el.textContent = msg;
+    el.textContent = message;
     el.classList.add("active");
     setTimeout(() => el.classList.remove("active"), 5000);
   }
 
-  const showError = (msg, id) => showMessage("error", msg, id);
-  const showSuccess = (msg, id) => showMessage("success", msg, id);
-
-  function pageName() {
-    const p = (location.pathname || "").toLowerCase();
-    if (p.endsWith("/admin.html")) return "admin";
-    if (p.endsWith("/customer.html")) return "customer";
-    return "index";
+  function showError(message, elementId = "errorMessage") {
+    const el = byId(elementId);
+    if (!el) return;
+    el.textContent = message;
+    el.classList.add("active");
+    setTimeout(() => el.classList.remove("active"), 5000);
   }
 
-  function todayISO() {
-    return new Date().toISOString().split("T")[0];
+  function safeValue(id) {
+    const el = byId(id);
+    return el ? el.value : "";
   }
 
-  function uid() {
-    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  function getBackendId(item) { return item.__backendId || item.id; }
+
+  function isCustomerPage() {
+    return !!byId("customerDashboard") || !!byId("customerBookingsList") || !!byId("customerBookingFormEl");
   }
+
+  function isAdminPage() {
+    return !!byId("adminDashboard") || !!byId("bookingsList") || !!byId("pendingCount");
+  }
+
+  function goTo(path) { window.location.href = path; }
 
   // ---------------------------
-  // localStorage "DB"
-  // ---------------------------
-  const LS_KEYS = {
-    customers: "derma_customers_v1",
-    bookings: "derma_bookings_v1",
-    sessionCustomerId: "derma_session_customer_id_v1",
-    sessionAdmin: "derma_session_admin_v1",
-  };
-
-  function loadCustomers() {
-    try {
-      return JSON.parse(localStorage.getItem(LS_KEYS.customers) || "[]");
-    } catch {
-      return [];
-    }
-  }
-
-  function loadBookings() {
-    try {
-      return JSON.parse(localStorage.getItem(LS_KEYS.bookings) || "[]");
-    } catch {
-      return [];
-    }
-  }
-
-  function saveCustomers(customers) {
-    localStorage.setItem(LS_KEYS.customers, JSON.stringify(customers));
-  }
-
-  function saveBookings(bookings) {
-    localStorage.setItem(LS_KEYS.bookings, JSON.stringify(bookings));
-  }
-
-  function getCustomerSessionId() {
-    return localStorage.getItem(LS_KEYS.sessionCustomerId);
-  }
-
-  function setCustomerSessionId(id) {
-    localStorage.setItem(LS_KEYS.sessionCustomerId, id);
-  }
-
-  function clearCustomerSession() {
-    localStorage.removeItem(LS_KEYS.sessionCustomerId);
-  }
-
-  function isAdminLoggedIn() {
-    return localStorage.getItem(LS_KEYS.sessionAdmin) === "true";
-  }
-
-  function setAdminLoggedIn(val) {
-    localStorage.setItem(LS_KEYS.sessionAdmin, val ? "true" : "false");
-  }
-
-  function clearAdminSession() {
-    localStorage.removeItem(LS_KEYS.sessionAdmin);
-  }
-
-  // ---------------------------
-  // Email confirmation via Netlify function
+  // Email confirmation (Netlify)
   // ---------------------------
   async function sendBookingConfirmationEmail(booking) {
     if (!booking?.patientEmail) return;
@@ -153,743 +164,790 @@
   }
 
   // ---------------------------
-  // Booking conflict logic
+  // Demo-mode CRUD (localStorage)
   // ---------------------------
-  function isSlotTaken(bookings, { date, service, time }, ignoreBookingId = null) {
-    return bookings.some((b) => {
-      const sameSlot =
-        b.date === date &&
-        b.service === service &&
-        b.time === time &&
-        b.status !== "rejected";
+  function loadDemoData() {
+    currentCustomers = readJSON(STORAGE.CUSTOMERS, []);
+    currentBookings  = readJSON(STORAGE.BOOKINGS,  []);
+  }
 
-      const notIgnored = ignoreBookingId ? b.id !== ignoreBookingId : true;
-      return sameSlot && notIgnored;
-    });
+  function saveDemoCustomers() { writeJSON(STORAGE.CUSTOMERS, currentCustomers); }
+  function saveDemoBookings()  { writeJSON(STORAGE.BOOKINGS,  currentBookings);  }
+
+  function demoCreate(item) {
+    if (item.type === "customer") {
+      currentCustomers.push(item);
+      saveDemoCustomers();
+    } else {
+      currentBookings.push({ ...item, __backendId: item.id });
+      saveDemoBookings();
+    }
+  }
+
+  function demoUpdate(updated) {
+    if (updated.type === "customer") {
+      const idx = currentCustomers.findIndex((c) => c.id === updated.id);
+      if (idx !== -1) currentCustomers[idx] = updated;
+      saveDemoCustomers();
+    } else {
+      const id  = getBackendId(updated);
+      const idx = currentBookings.findIndex((b) => getBackendId(b) === id);
+      if (idx !== -1) currentBookings[idx] = updated;
+      saveDemoBookings();
+    }
+  }
+
+  function demoDelete(item) {
+    if (item.type === "customer") {
+      currentCustomers = currentCustomers.filter((c) => c.id !== item.id);
+      saveDemoCustomers();
+    } else {
+      const id = getBackendId(item);
+      currentBookings = currentBookings.filter((b) => getBackendId(b) !== id);
+      saveDemoBookings();
+    }
   }
 
   // ---------------------------
-  // INDEX page (Landing: customer auth + admin auth + guest booking)
+  // Initialization  ← ONE clean version, nothing after it
   // ---------------------------
-  function initIndexPage() {
-    // Customer auth tab switcher
-    window.switchAuthTab = function switchAuthTab(tab) {
-      const login = byId("customerLogin");
-      const reg = byId("customerRegister");
-      const tabs = document.querySelectorAll("#customerAuth .nav-tab");
-      tabs.forEach((t) => t.classList.remove("active"));
+  async function initializeApp() {
+    if (!window.dataSdk) loadDemoData();
 
-      if (tab === "register") {
-        if (login) login.style.display = "none";
-        if (reg) reg.style.display = "block";
-        if (tabs[1]) tabs[1].classList.add("active");
-      } else {
-        if (login) login.style.display = "block";
-        if (reg) reg.style.display = "none";
-        if (tabs[0]) tabs[0].classList.add("active");
-      }
-    };
+    const session = getSession();
 
-    // Promo popup handlers (optional)
-    window.closePromo = function closePromo() {
-      const popup = byId("promoPopup");
-      if (popup) popup.classList.remove("active");
-    };
-    window.showPromo = function showPromo() {
-      const popup = byId("promoPopup");
-      if (popup) popup.classList.add("active");
-    };
-    setTimeout(() => window.showPromo && window.showPromo(), 3000);
-
-    // Customer Register
-    const regForm = byId("customerRegisterForm");
-    if (regForm) {
-      regForm.addEventListener("submit", (e) => {
-        e.preventDefault();
-
-        const customers = loadCustomers();
-
-        const name = (byId("registerName")?.value || "").trim();
-        const email = (byId("registerEmail")?.value || "").trim().toLowerCase();
-        const phone = (byId("registerPhone")?.value || "").trim();
-        const password = byId("registerPassword")?.value || "";
-
-        if (!name || !email || !password) {
-          showError("Please fill in name, email, and password.", "customerRegisterError");
-          return;
-        }
-
-        const exists = customers.some((c) => (c.email || "").toLowerCase() === email);
-        if (exists) {
-          showError("An account with this email already exists.", "customerRegisterError");
-          return;
-        }
-
-        const customer = {
-          id: uid(),
-          name,
-          email,
-          phone,
-          password, // demo only
-          createdAt: new Date().toISOString(),
-        };
-
-        customers.push(customer);
-        saveCustomers(customers);
-
-        showSuccess("Account created! You can log in now.", "customerRegisterSuccess");
-        regForm.reset();
-        window.switchAuthTab("login");
-      });
-    }
-
-    // Customer Login
-    const loginForm = byId("customerLoginForm");
-    if (loginForm) {
-      loginForm.addEventListener("submit", (e) => {
-        e.preventDefault();
-
-        const customers = loadCustomers();
-        const email = (byId("customerEmail")?.value || "").trim().toLowerCase();
-        const password = byId("customerPassword")?.value || "";
-
-        const customer = customers.find(
-          (c) => (c.email || "").toLowerCase() === email && c.password === password
-        );
-
-        if (!customer) {
-          showError("Invalid email or password.", "customerLoginError");
-          return;
-        }
-
-        setCustomerSessionId(customer.id);
-        // redirect to dashboard page
-        location.href = "./customer.html";
-      });
-    }
-
-    // Admin Login (THIS fixes “button does nothing” by attaching listener on index page)
-    const adminForm = byId("loginForm");
-    if (adminForm) {
-      adminForm.addEventListener("submit", (e) => {
-        e.preventDefault();
-
-        const username = (byId("adminUsername")?.value || "").trim();
-        const password = byId("adminPassword")?.value || "";
-
-        if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-          setAdminLoggedIn(true);
-          location.href = "./admin.html";
-          return;
-        }
-
-        showError("Invalid credentials. (Demo: Mary.mary@clinic.com / Dermadent123)", "loginError");
-      });
-    }
-
-    // Guest booking toggle
-    window.toggleGuestBooking = function toggleGuestBooking() {
-      const sec = byId("guestBookingSection");
-      if (!sec) return;
-      const isHidden = sec.style.display === "none" || !sec.style.display;
-      sec.style.display = isHidden ? "block" : "none";
-    };
-
-    // Guest booking logic
-    let selectedTime = null;
-
-    function setMinDate() {
-      const dateInput = byId("dateInput");
-      if (dateInput) {
-        dateInput.min = todayISO();
-        if (!dateInput.value) dateInput.value = todayISO();
-      }
-    }
-
-    function onPublicServiceChange() {
-      const svc = byId("serviceSelect")?.value || "";
-      const group = byId("procedureGroupPublic");
-      const select = byId("procedureSelectPublic");
-      if (!group || !select) return;
-
-      if (!svc) {
-        group.style.display = "none";
-        select.innerHTML = '<option value="">Choose a procedure...</option>';
-        return;
-      }
-
-      const list = procedures[svc] || [];
-      select.innerHTML =
-        ['<option value="">Choose a procedure...</option>']
-          .concat(list.map((p) => `<option value="${p}">${p}</option>`))
-          .join("");
-
-      group.style.display = "block";
-    }
-
-    function renderTimeSlots() {
-      const container = byId("timeSlots");
-      if (!container) return;
-
-      const bookings = loadBookings();
-      const date = byId("dateInput")?.value || "";
-      const service = byId("serviceSelect")?.value || "";
-
-      if (!date || !service) {
-        container.innerHTML =
-          '<p style="color:#999;text-align:center;padding:20px;">Please select a service and date first</p>';
-        return;
-      }
-
-      container.innerHTML = "";
-      const booked = bookings
-        .filter((b) => b.date === date && b.service === service && b.status !== "rejected")
-        .map((b) => b.time);
-
-      timeSlots.forEach((t) => {
-        const slot = document.createElement("div");
-        slot.className = "time-slot";
-        slot.textContent = t;
-
-        if (booked.includes(t)) {
-          slot.classList.add("booked");
-        } else {
-          slot.addEventListener("click", () => {
-            document.querySelectorAll("#timeSlots .time-slot").forEach((s) => s.classList.remove("selected"));
-            slot.classList.add("selected");
-            selectedTime = t;
-          });
-        }
-
-        if (selectedTime === t && !booked.includes(t)) slot.classList.add("selected");
-
-        container.appendChild(slot);
-      });
-    }
-
-    // Wire guest booking inputs if present
+    setupEventListeners();
     setMinDate();
 
-    if (exists("serviceSelect")) {
-      byId("serviceSelect").addEventListener("change", () => {
-        onPublicServiceChange();
-        renderTimeSlots();
-      });
-    }
-    if (exists("dateInput")) {
-      byId("dateInput").addEventListener("change", renderTimeSlots);
+    if (byId("promoPopup")) setTimeout(showPromo, 3000);
+
+    // ── Customer page guard ──────────────────────────────
+    if (isCustomerPage()) {
+      if (!session || session.role !== "customer" || !session.customerId) {
+        clearSession();
+        return goTo("./index.html");
+      }
+
+      currentCustomer = currentCustomers.find((c) => c.id === session.customerId) || null;
+
+      if (!currentCustomer) {
+        clearSession();
+        return goTo("./index.html");
+      }
+
+      isCustomerLoggedIn = true;
+
+      const welcome = byId("customerWelcome");
+      if (welcome) welcome.textContent = `${currentCustomer.name}'s Appointments`;
+
+      // Show dashboard, hide auth panel
+      const customerAuth      = byId("customerAuth");
+      const customerDashboard = byId("customerDashboard");
+      if (customerAuth)      customerAuth.style.display      = "none";
+      if (customerDashboard) customerDashboard.style.display = "block";
+
+      renderCustomerBookings();
+      updateCustomerTimeSlots();
+      return;
     }
 
-    // Guest booking submit
+    // ── Admin page guard ─────────────────────────────────
+    if (isAdminPage()) {
+      if (!session || session.role !== "admin") {
+        clearSession();
+        return goTo("./index.html");
+      }
+
+      isLoggedIn = true;
+
+      const adminLogin     = byId("adminLogin");
+      const adminDashboard = byId("adminDashboard");
+      if (adminLogin)     adminLogin.style.display     = "none";
+      if (adminDashboard) adminDashboard.style.display = "block";
+
+      renderBookingsList();
+      updateAdminStats();
+    }
+  }
+
+  // ---------------------------
+  // Event Listeners
+  // ---------------------------
+  function setupEventListeners() {
+    // Public booking form
     const bookingForm = byId("bookingForm");
-    if (bookingForm) {
-      bookingForm.addEventListener("submit", async (e) => {
-        e.preventDefault();
+    if (bookingForm) bookingForm.addEventListener("submit", handleBookingSubmit);
 
-        if (!selectedTime) {
-          showError("Please select a time slot", "errorMessage");
-          return;
-        }
+    const dateInput = byId("dateInput");
+    if (dateInput) dateInput.addEventListener("change", updateTimeSlots);
 
-        const bookings = loadBookings();
-        const customers = loadCustomers(); // not required but fine
-
-        const booking = {
-          id: uid(),
-          service: byId("serviceSelect")?.value || "",
-          procedure: byId("procedureSelectPublic")?.value || "",
-          date: byId("dateInput")?.value || "",
-          time: selectedTime,
-          patientName: (byId("nameInput")?.value || "").trim(),
-          patientEmail: (byId("emailInput")?.value || "").trim(),
-          patientPhone: (byId("phoneInput")?.value || "").trim(),
-          status: "pending",
-          createdAt: new Date().toISOString(),
-          customerId: "public",
-        };
-
-        if (!booking.service || !booking.date || !booking.patientName || !booking.patientEmail) {
-          showError("Please fill in service, date, name, and email.", "errorMessage");
-          return;
-        }
-
-        if (isSlotTaken(bookings, booking)) {
-          showError("That time slot is already booked. Please choose another.", "errorMessage");
-          renderTimeSlots();
-          return;
-        }
-
-        bookings.push(booking);
-        saveBookings(bookings);
-
-        // send email confirmation
-        await sendBookingConfirmationEmail(booking);
-
-        showSuccess("Booked! Confirmation email sent.", "successMessage");
-        bookingForm.reset();
-        selectedTime = null;
-        setMinDate();
+    const serviceSelect = byId("serviceSelect");
+    if (serviceSelect) {
+      serviceSelect.addEventListener("change", () => {
         onPublicServiceChange();
-        renderTimeSlots();
+        updateTimeSlots();
       });
     }
 
-    // initial render if guest section visible
-    onPublicServiceChange();
-    renderTimeSlots();
+    // Admin login
+    const loginForm = byId("loginForm");
+    if (loginForm) loginForm.addEventListener("submit", handleAdminLogin);
+
+    // Customer auth
+    const customerLoginForm = byId("customerLoginForm");
+    if (customerLoginForm) customerLoginForm.addEventListener("submit", handleCustomerLogin);
+
+    const customerRegisterForm = byId("customerRegisterForm");
+    if (customerRegisterForm) customerRegisterForm.addEventListener("submit", handleCustomerRegister);
+
+    // Customer booking form
+    const customerBookingFormEl = byId("customerBookingFormEl");
+    if (customerBookingFormEl) customerBookingFormEl.addEventListener("submit", handleCustomerBookingSubmit);
+
+    const customerServiceSelect = byId("customerServiceSelect");
+    if (customerServiceSelect) {
+      customerServiceSelect.addEventListener("change", () => {
+        onCustomerServiceChange();
+        updateCustomerTimeSlots();
+      });
+    }
+
+    const customerDateInput = byId("customerDateInput");
+    if (customerDateInput) customerDateInput.addEventListener("change", updateCustomerTimeSlots);
+  }
+
+  function setMinDate() {
+    const today = new Date().toISOString().split("T")[0];
+
+    const dateInput = byId("dateInput");
+    if (dateInput) {
+      dateInput.setAttribute("min", today);
+      if (!dateInput.value) dateInput.value = today;
+    }
+
+    const customerDateInput = byId("customerDateInput");
+    if (customerDateInput) {
+      customerDateInput.setAttribute("min", today);
+      if (!customerDateInput.value) customerDateInput.value = today;
+    }
+
+    updateTimeSlots();
+    updateCustomerTimeSlots();
   }
 
   // ---------------------------
-  // CUSTOMER page (Dashboard + booking form only)
+  // Public Booking
   // ---------------------------
-  function initCustomerPage() {
-    // Guard
-    const customerId = getCustomerSessionId();
-    if (!customerId) {
-      location.href = "./index.html";
+  function updateTimeSlots() {
+    const container = byId("timeSlots");
+    if (!container) return;
+
+    const selectedDate    = safeValue("dateInput");
+    const selectedService = safeValue("serviceSelect");
+
+    if (!selectedDate || !selectedService) {
+      container.innerHTML = '<p style="color:#999;text-align:center;padding:20px;">Please select a service and date first</p>';
       return;
     }
 
-    const customers = loadCustomers();
-    const currentCustomer = customers.find((c) => c.id === customerId);
-    if (!currentCustomer) {
-      clearCustomerSession();
-      location.href = "./index.html";
-      return;
-    }
+    container.innerHTML = "";
 
-    // UI helpers
-    function showDashboard() {
-      if (exists("customerDashboard")) byId("customerDashboard").style.display = "block";
-      if (exists("customerBookingForm")) byId("customerBookingForm").style.display = "none";
-      renderCustomerBookings();
-    }
+    const bookedSlots = currentBookings
+      .filter((b) => b.date === selectedDate && b.service === selectedService && b.status !== "rejected")
+      .map((b) => b.time);
 
-    function showBookingForm() {
-      if (exists("customerDashboard")) byId("customerDashboard").style.display = "none";
-      if (exists("customerBookingForm")) byId("customerBookingForm").style.display = "block";
-      resetBookingForm();
-      renderCustomerTimeSlots();
-    }
+    timeSlots.forEach((time) => {
+      const slot = document.createElement("div");
+      slot.className = "time-slot";
+      slot.textContent = time;
 
-    // Expose buttons
-    window.customerLogout = function customerLogout() {
-      clearCustomerSession();
-      location.href = "./index.html";
-    };
-    window.showCustomerDashboard = showDashboard;
-    window.showBookingForm = showBookingForm;
-
-    // Welcome
-    if (exists("customerWelcome")) {
-      byId("customerWelcome").textContent = `${currentCustomer.name}'s Appointments`;
-    }
-
-    // Booking state
-    let customerSelectedTime = null;
-    let editingBookingId = null;
-
-    function setMinDate() {
-      const di = byId("customerDateInput");
-      if (di) {
-        di.min = todayISO();
-        if (!di.value) di.value = todayISO();
-      }
-    }
-
-    function onCustomerServiceChange() {
-      const svc = byId("customerServiceSelect")?.value || "";
-      const group = byId("procedureGroup");
-      const select = byId("customerProcedureSelect");
-
-      if (!group || !select) return;
-
-      if (!svc) {
-        group.style.display = "none";
-        select.innerHTML = '<option value="">Choose a procedure...</option>';
-        return;
+      if (bookedSlots.includes(time)) {
+        slot.classList.add("booked");
+      } else {
+        slot.addEventListener("click", () => selectTimeSlot(time, slot));
       }
 
-      const list = procedures[svc] || [];
-      select.innerHTML =
-        ['<option value="">Choose a procedure...</option>']
-          .concat(list.map((p) => `<option value="${p}">${p}</option>`))
-          .join("");
-
-      group.style.display = "block";
-    }
-
-    function renderCustomerTimeSlots() {
-      const container = byId("customerTimeSlots");
-      if (!container) return;
-
-      const bookings = loadBookings();
-      const date = byId("customerDateInput")?.value || "";
-      const service = byId("customerServiceSelect")?.value || "";
-
-      if (!date || !service) {
-        container.innerHTML =
-          '<p style="color:#999;text-align:center;padding:20px;">Please select a service and date first</p>';
-        return;
+      if (selectedTime === time && !bookedSlots.includes(time)) {
+        slot.classList.add("selected");
       }
 
-      container.innerHTML = "";
-      const booked = bookings
-        .filter(
-          (b) =>
-            b.date === date &&
-            b.service === service &&
-            b.status !== "rejected" &&
-            (editingBookingId ? b.id !== editingBookingId : true)
-        )
-        .map((b) => b.time);
-
-      timeSlots.forEach((t) => {
-        const slot = document.createElement("div");
-        slot.className = "time-slot";
-        slot.textContent = t;
-
-        if (booked.includes(t)) {
-          slot.classList.add("booked");
-        } else {
-          slot.addEventListener("click", () => {
-            document.querySelectorAll("#customerTimeSlots .time-slot").forEach((s) => s.classList.remove("selected"));
-            slot.classList.add("selected");
-            customerSelectedTime = t;
-          });
-        }
-
-        if (customerSelectedTime === t && !booked.includes(t)) slot.classList.add("selected");
-        container.appendChild(slot);
-      });
-    }
-
-    function resetBookingForm() {
-      const form = byId("customerBookingFormEl");
-      if (form) form.reset();
-      setMinDate();
-      editingBookingId = null;
-      customerSelectedTime = null;
-      onCustomerServiceChange();
-      const btn = byId("customerSubmitBtn");
-      if (btn) btn.textContent = "Book Appointment";
-    }
-
-    function renderCustomerBookings() {
-      const list = byId("customerBookingsList");
-      if (!list) return;
-
-      const bookings = loadBookings();
-      const mine = bookings
-        .filter((b) => b.customerId === currentCustomer.id)
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-      if (mine.length === 0) {
-        list.innerHTML = '<div class="empty-state"><p>No bookings yet</p></div>';
-        return;
-      }
-
-      list.innerHTML = "";
-      mine.forEach((b) => {
-        const item = document.createElement("div");
-        item.className = `booking-item ${b.status}`;
-
-        const canEdit = b.status === "pending" || b.status === "confirmed";
-
-        item.innerHTML = `
-          <div class="booking-header">
-            <div class="booking-info">
-              <h3>${(b.service || "Service").charAt(0).toUpperCase() + (b.service || "service").slice(1)}</h3>
-              <p><strong>Date:</strong> ${b.date} at ${b.time}</p>
-              ${b.procedure ? `<p><strong>Procedure:</strong> ${b.procedure}</p>` : ""}
-              <span class="status-badge ${b.status}">${b.status}</span>
-            </div>
-            <div class="booking-actions">
-              ${
-                canEdit
-                  ? `
-                    <button class="btn btn-primary" data-edit="${b.id}">Edit</button>
-                    <button class="btn btn-secondary" data-del="${b.id}">Delete</button>
-                  `
-                  : ""
-              }
-            </div>
-          </div>
-        `;
-
-        list.appendChild(item);
-      });
-
-      // bind edit/delete
-      list.querySelectorAll("[data-edit]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const id = btn.getAttribute("data-edit");
-          startEdit(id);
-        });
-      });
-
-      list.querySelectorAll("[data-del]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const id = btn.getAttribute("data-del");
-          deleteBooking(id);
-        });
-      });
-    }
-
-    function startEdit(id) {
-      const bookings = loadBookings();
-      const b = bookings.find((x) => x.id === id && x.customerId === currentCustomer.id);
-      if (!b) return;
-
-      editingBookingId = b.id;
-      customerSelectedTime = b.time;
-
-      // go form
-      showBookingForm();
-
-      if (exists("customerServiceSelect")) byId("customerServiceSelect").value = b.service || "";
-      onCustomerServiceChange();
-
-      if (exists("customerProcedureSelect")) byId("customerProcedureSelect").value = b.procedure || "";
-      if (exists("customerDateInput")) byId("customerDateInput").value = b.date || "";
-
-      renderCustomerTimeSlots();
-      const btn = byId("customerSubmitBtn");
-      if (btn) btn.textContent = "Update Appointment";
-    }
-
-    function deleteBooking(id) {
-      if (!confirm("Delete this appointment?")) return;
-      const bookings = loadBookings();
-      const next = bookings.filter((b) => !(b.id === id && b.customerId === currentCustomer.id));
-      saveBookings(next);
-      renderCustomerBookings();
-      showSuccess("Deleted.", "customerSuccessMessage");
-    }
-
-    // Wire form inputs
-    setMinDate();
-    if (exists("customerServiceSelect")) byId("customerServiceSelect").addEventListener("change", () => {
-      onCustomerServiceChange();
-      renderCustomerTimeSlots();
+      container.appendChild(slot);
     });
-    if (exists("customerDateInput")) byId("customerDateInput").addEventListener("change", renderCustomerTimeSlots);
-
-    // Submit booking
-    const form = byId("customerBookingFormEl");
-    if (form) {
-      form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-
-        if (!customerSelectedTime) {
-          showError("Please select a time slot.", "customerErrorMessage");
-          return;
-        }
-
-        const bookings = loadBookings();
-
-        const base = {
-          service: byId("customerServiceSelect")?.value || "",
-          procedure: byId("customerProcedureSelect")?.value || "",
-          date: byId("customerDateInput")?.value || "",
-          time: customerSelectedTime,
-        };
-
-        if (!base.service || !base.date) {
-          showError("Please select service and date.", "customerErrorMessage");
-          return;
-        }
-
-        if (editingBookingId) {
-          const existing = bookings.find((b) => b.id === editingBookingId && b.customerId === currentCustomer.id);
-          if (!existing) {
-            showError("Could not find booking to edit.", "customerErrorMessage");
-            return;
-          }
-
-          if (isSlotTaken(bookings, base, existing.id)) {
-            showError("That time slot is already booked. Choose another.", "customerErrorMessage");
-            renderCustomerTimeSlots();
-            return;
-          }
-
-          const updated = {
-            ...existing,
-            ...base,
-            status: "pending", // resets for admin review
-            updatedAt: new Date().toISOString(),
-          };
-
-          const next = bookings.map((b) => (b.id === existing.id ? updated : b));
-          saveBookings(next);
-
-          showSuccess("Appointment updated. Awaiting admin approval.", "customerSuccessMessage");
-          editingBookingId = null;
-          customerSelectedTime = null;
-
-          showDashboard();
-          return;
-        }
-
-        // new booking
-        const booking = {
-          id: uid(),
-          ...base,
-          status: "pending",
-          createdAt: new Date().toISOString(),
-          customerId: currentCustomer.id,
-          patientName: currentCustomer.name,
-          patientEmail: currentCustomer.email,
-          patientPhone: currentCustomer.phone || "",
-        };
-
-        if (isSlotTaken(bookings, booking)) {
-          showError("That time slot is already booked. Choose another.", "customerErrorMessage");
-          renderCustomerTimeSlots();
-          return;
-        }
-
-        bookings.push(booking);
-        saveBookings(bookings);
-
-        await sendBookingConfirmationEmail(booking);
-
-        showSuccess("Booked! Confirmation email sent.", "customerSuccessMessage");
-        showDashboard();
-      });
-    }
-
-    // Default view
-    showDashboard();
   }
 
-  // ---------------------------
-  // ADMIN page (Dashboard only)
-  // ---------------------------
-  function initAdminPage() {
-    // Guard
-    if (!isAdminLoggedIn()) {
-      location.href = "./index.html";
+  function selectTimeSlot(time, element) {
+    document.querySelectorAll("#timeSlots .time-slot").forEach((s) => s.classList.remove("selected"));
+    element.classList.add("selected");
+    selectedTime = time;
+  }
+
+  async function handleBookingSubmit(e) {
+    e.preventDefault();
+
+    if (!selectedTime) { showError("Please select a time slot"); return; }
+
+    const submitBtn = byId("submitBtn");
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Booking..."; }
+
+    const booking = {
+      id: Date.now().toString(),
+      type: "booking",
+      service:      safeValue("serviceSelect"),
+      procedure:    safeValue("procedureSelectPublic") || "",
+      date:         safeValue("dateInput"),
+      time:         selectedTime,
+      patientName:  safeValue("nameInput"),
+      patientEmail: safeValue("emailInput"),
+      patientPhone: safeValue("phoneInput"),
+      status:       "pending",
+      createdAt:    new Date().toISOString(),
+      customerId:   "public",
+    };
+
+    if (window.dataSdk?.create) {
+      const result = await window.dataSdk.create(booking);
+      if (!result.isOk) {
+        showError("Failed to book appointment. Please try again.");
+      } else {
+        await sendBookingConfirmationEmail(booking);
+        showSuccess("Appointment booked successfully! You will receive a confirmation email shortly.");
+      }
+    } else {
+      demoCreate(booking);
+      await sendBookingConfirmationEmail(booking);
+      showSuccess("Appointment booked successfully! You will receive a confirmation email shortly.");
+      updateTimeSlots();
+    }
+
+    const form = byId("bookingForm");
+    if (form) form.reset();
+    selectedTime = null;
+
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Book Appointment"; }
+
+    setMinDate();
+  }
+
+  function onPublicServiceChange() {
+    const svc    = safeValue("serviceSelect");
+    const group  = byId("procedureGroupPublic");
+    const select = byId("procedureSelectPublic");
+
+    if (!group || !select) return;
+
+    if (!svc) {
+      group.style.display = "none";
+      select.innerHTML = '<option value="">Choose a procedure...</option>';
       return;
     }
 
-    window.logout = function logout() {
-      clearAdminSession();
-      location.href = "./index.html";
-    };
-
-    let currentTab = "pending"; // pending | confirmed | all
-
-    window.switchTab = function switchTab(tab) {
-      currentTab = tab;
-      renderBookings();
-      updateStats();
-      // active state
-      document.querySelectorAll(".nav-tab").forEach((btn) => btn.classList.remove("active"));
-      if (tab === "pending") document.querySelectorAll(".nav-tab")[0]?.classList.add("active");
-      if (tab === "confirmed") document.querySelectorAll(".nav-tab")[1]?.classList.add("active");
-      if (tab === "all") document.querySelectorAll(".nav-tab")[2]?.classList.add("active");
-    };
-
-    window.updateBookingStatus = function updateBookingStatus(id, status) {
-      const bookings = loadBookings();
-      const b = bookings.find((x) => x.id === id);
-      if (!b) return;
-
-      const updated = { ...b, status, updatedAt: new Date().toISOString() };
-      saveBookings(bookings.map((x) => (x.id === id ? updated : x)));
-
-      renderBookings();
-      updateStats();
-    };
-
-    window.deleteBooking = function deleteBooking(id) {
-      if (!confirm("Delete this booking permanently?")) return;
-      const bookings = loadBookings();
-      saveBookings(bookings.filter((b) => b.id !== id));
-      renderBookings();
-      updateStats();
-    };
-
-    function updateStats() {
-      const bookings = loadBookings();
-      const customers = loadCustomers();
-
-      const pending = bookings.filter((b) => b.status === "pending").length;
-      const approved = bookings.filter((b) => b.status === "confirmed").length;
-
-      if (exists("pendingCount")) byId("pendingCount").textContent = String(pending);
-      if (exists("approvedCount")) byId("approvedCount").textContent = String(approved);
-      if (exists("totalCount")) byId("totalCount").textContent = String(customers.length);
-    }
-
-    function renderBookings() {
-      const container = byId("bookingsList");
-      if (!container) return;
-
-      const bookings = loadBookings().slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      const customers = loadCustomers();
-
-      let list = bookings;
-      if (currentTab === "pending") list = bookings.filter((b) => b.status === "pending");
-      if (currentTab === "confirmed") list = bookings.filter((b) => b.status === "confirmed");
-
-      if (list.length === 0) {
-        container.innerHTML = '<div class="empty-state"><p>No bookings found</p></div>';
-        return;
-      }
-
-      container.innerHTML = "";
-      list.forEach((b) => {
-        const name =
-          b.patientName ||
-          customers.find((c) => c.id === b.customerId)?.name ||
-          "N/A";
-
-        const item = document.createElement("div");
-        item.className = `booking-item ${b.status}`;
-
-        item.innerHTML = `
-          <div class="booking-header">
-            <div class="booking-info">
-              <h3>${name}</h3>
-              <p><strong>Service:</strong> ${b.service ? b.service.charAt(0).toUpperCase() + b.service.slice(1) : "N/A"}</p>
-              ${b.procedure ? `<p><strong>Procedure:</strong> ${b.procedure}</p>` : ""}
-              <p><strong>Date:</strong> ${b.date} at ${b.time}</p>
-              <p><strong>Contact:</strong> ${b.patientEmail || "N/A"} | ${b.patientPhone || "N/A"}</p>
-              <span class="status-badge ${b.status}">${b.status}</span>
-            </div>
-            <div class="booking-actions">
-              ${
-                b.status === "pending"
-                  ? `
-                    <button class="btn btn-success" onclick="updateBookingStatus('${b.id}','confirmed')">Confirm</button>
-                    <button class="btn btn-danger" onclick="updateBookingStatus('${b.id}','rejected')">Reject</button>
-                  `
-                  : ""
-              }
-              <button class="btn btn-danger" onclick="deleteBooking('${b.id}')">Delete</button>
-            </div>
-          </div>
-        `;
-
-        container.appendChild(item);
-      });
-    }
-
-    // init
-    updateStats();
-    renderBookings();
-    window.switchTab("pending");
+    const list = procedures[svc] || [];
+    select.innerHTML = ['<option value="">Choose a procedure...</option>']
+      .concat(list.map((p) => `<option value="${p}">${p}</option>`))
+      .join("");
+    group.style.display = "block";
   }
 
   // ---------------------------
-  // Boot
+  // Promo popup
   // ---------------------------
-  document.addEventListener("DOMContentLoaded", () => {
-    const p = pageName();
-    if (p === "index") initIndexPage();
-    if (p === "customer") initCustomerPage();
-    if (p === "admin") initAdminPage();
-  });
+  function showPromo() {
+    const popup = byId("promoPopup");
+    if (popup) popup.classList.add("active");
+  }
+
+  function closePromo() {
+    const popup = byId("promoPopup");
+    if (popup) popup.classList.remove("active");
+  }
+
+  // ---------------------------
+  // Admin dashboard
+  // ---------------------------
+  function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll(".nav-tab").forEach((btn) => {
+      const label = btn.textContent.trim().toLowerCase();
+      const isActive =
+        (tab === "pending"   && label === "pending") ||
+        (tab === "confirmed" && (label === "approved" || label === "confirmed")) ||
+        (tab === "all"       && label.includes("all"));
+      btn.classList.toggle("active", !!isActive);
+    });
+    renderBookingsList();
+  }
+
+  function renderBookingsList() {
+    const container = byId("bookingsList");
+    if (!container) return;
+
+    let list = currentBookings.slice();
+    if (currentTab === "pending")   list = list.filter((b) => b.status === "pending");
+    if (currentTab === "confirmed") list = list.filter((b) => b.status === "confirmed");
+    list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    if (list.length === 0) {
+      container.innerHTML = '<div class="empty-state"><p>No bookings found</p></div>';
+      return;
+    }
+
+    container.innerHTML = "";
+
+    list.forEach((booking) => {
+      const item = document.createElement("div");
+      item.className = `booking-item ${booking.status}`;
+
+      const id           = getBackendId(booking);
+      const customerName = booking.patientName ||
+        currentCustomers.find((c) => c.id === booking.customerId)?.name || "N/A";
+
+      item.innerHTML = `
+        <div class="booking-header">
+          <div class="booking-info">
+            <h3>${customerName}</h3>
+            <p><strong>Service:</strong> ${booking.service ? booking.service.charAt(0).toUpperCase() + booking.service.slice(1) : "N/A"}</p>
+            ${booking.procedure ? `<p><strong>Procedure:</strong> ${booking.procedure}</p>` : ""}
+            <p><strong>Date:</strong> ${booking.date} at ${booking.time}</p>
+            <p><strong>Contact:</strong> ${booking.patientEmail || "N/A"} | ${booking.patientPhone || "N/A"}</p>
+            <span class="status-badge ${booking.status}">${booking.status}</span>
+          </div>
+          <div class="booking-actions">
+            ${booking.status === "pending" ? `
+              <button class="btn btn-success" onclick="updateBookingStatus('${id}', 'confirmed')">Confirm</button>
+              <button class="btn btn-danger"  onclick="updateBookingStatus('${id}', 'rejected')">Reject</button>
+            ` : ""}
+            <button class="btn btn-danger" onclick="deleteBooking('${id}')">Delete</button>
+          </div>
+        </div>`;
+
+      container.appendChild(item);
+    });
+  }
+
+  async function updateBookingStatus(backendId, newStatus) {
+    const booking = currentBookings.find((b) => getBackendId(b) === backendId);
+    if (!booking) return;
+
+    const updatedBooking = { ...booking, status: newStatus };
+
+    if (window.dataSdk?.update) {
+      const result = await window.dataSdk.update(updatedBooking);
+      if (!result.isOk) return showError("Failed to update booking status");
+    } else {
+      demoUpdate(updatedBooking);
+    }
+
+    renderBookingsList();
+    updateAdminStats();
+    updateTimeSlots();
+    updateCustomerTimeSlots();
+  }
+
+  async function deleteBooking(backendId) {
+    const booking = currentBookings.find((b) => getBackendId(b) === backendId);
+    if (!booking) return;
+    if (!confirm("Are you sure you want to delete this booking permanently?")) return;
+
+    if (window.dataSdk?.delete) {
+      const result = await window.dataSdk.delete(booking);
+      if (!result.isOk) return showError("Failed to delete booking");
+    } else {
+      demoDelete(booking);
+    }
+
+    renderBookingsList();
+    updateAdminStats();
+    updateTimeSlots();
+    updateCustomerTimeSlots();
+  }
+
+  function updateAdminStats() {
+    const pending        = currentBookings.filter((b) => b.status === "pending").length;
+    const approved       = currentBookings.filter((b) => b.status === "confirmed").length;
+    const totalCustomers = currentCustomers.length;
+
+    setText("pendingCount", String(pending));
+    setText("approvedCount", String(approved));
+    setText("totalCount", String(totalCustomers));
+  }
+
+  // ---------------------------
+  // Customer dashboard
+  // ---------------------------
+  function showBookingForm() {
+    const dashboard   = byId("customerDashboard");
+    const bookingForm = byId("customerBookingForm");
+    if (dashboard)   dashboard.style.display   = "none";
+    if (bookingForm) bookingForm.style.display = "block";
+
+    // Reset form state
+    editingCustomerBookingId = null;
+    customerSelectedTime     = null;
+    const form = byId("customerBookingFormEl");
+    if (form) form.reset();
+    const submitBtn = byId("customerSubmitBtn");
+    if (submitBtn) submitBtn.textContent = "Book Appointment";
+    updateCustomerTimeSlots();
+  }
+
+  function showCustomerDashboard() {
+    const dashboard   = byId("customerDashboard");
+    const bookingForm = byId("customerBookingForm");
+    if (bookingForm) bookingForm.style.display = "none";
+    if (dashboard)   dashboard.style.display   = "block";
+
+    editingCustomerBookingId = null;
+    customerSelectedTime     = null;
+    renderCustomerBookings();
+  }
+
+  function renderCustomerBookings() {
+    const list = byId("customerBookingsList");
+    if (!list) return;
+
+    if (!currentCustomer) {
+      list.innerHTML = '<div class="empty-state"><p>Error: Customer not logged in.</p></div>';
+      return;
+    }
+
+    const myBookings = currentBookings
+      .filter((b) => b.customerId === currentCustomer.id)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    if (myBookings.length === 0) {
+      list.innerHTML = '<div class="empty-state"><p>No bookings yet. Click "Book New Appointment" to get started.</p></div>';
+      return;
+    }
+
+    list.innerHTML = "";
+    myBookings.forEach((booking) => {
+      const id             = getBackendId(booking);
+      const canEditOrDelete = booking.status === "pending" || booking.status === "confirmed";
+
+      const item = document.createElement("div");
+      item.className = `booking-item ${booking.status}`;
+      item.innerHTML = `
+        <div class="booking-header">
+          <div class="booking-info">
+            <h3>${booking.service ? booking.service.charAt(0).toUpperCase() + booking.service.slice(1) : "Service"}</h3>
+            <p><strong>Date:</strong> ${booking.date} at ${booking.time}</p>
+            ${booking.procedure ? `<p><strong>Procedure:</strong> ${booking.procedure}</p>` : ""}
+            <span class="status-badge ${booking.status}">${booking.status}</span>
+          </div>
+          <div class="booking-actions">
+            ${canEditOrDelete ? `
+              <button class="btn btn-primary"   onclick="editCustomerBooking('${id}')">Edit</button>
+              <button class="btn btn-secondary" onclick="deleteCustomerBookingForCustomer('${id}')">Delete</button>
+            ` : ""}
+          </div>
+        </div>`;
+
+      list.appendChild(item);
+    });
+  }
+
+  function onCustomerServiceChange() {
+    const svc    = safeValue("customerServiceSelect");
+    const group  = byId("procedureGroup");
+    const select = byId("customerProcedureSelect");
+
+    if (!group || !select) return;
+
+    if (!svc) {
+      group.style.display = "none";
+      select.innerHTML = '<option value="">Choose a procedure...</option>';
+      return;
+    }
+
+    const list = procedures[svc] || [];
+    select.innerHTML = ['<option value="">Choose a procedure...</option>']
+      .concat(list.map((p) => `<option value="${p}">${p}</option>`))
+      .join("");
+    group.style.display = "block";
+  }
+
+  function updateCustomerTimeSlots() {
+    const container = byId("customerTimeSlots");
+    if (!container) return;
+
+    const selectedDate    = safeValue("customerDateInput");
+    const selectedService = safeValue("customerServiceSelect");
+
+    if (!selectedDate || !selectedService) {
+      container.innerHTML = '<p style="color:#999;text-align:center;padding:20px;">Please select a service and date first</p>';
+      return;
+    }
+
+    container.innerHTML = "";
+
+    const bookedSlots = currentBookings
+      .filter((b) =>
+        b.date === selectedDate &&
+        b.service === selectedService &&
+        b.status !== "rejected" &&
+        getBackendId(b) !== editingCustomerBookingId
+      )
+      .map((b) => b.time);
+
+    timeSlots.forEach((time) => {
+      const slot = document.createElement("div");
+      slot.className = "time-slot";
+      slot.textContent = time;
+
+      if (bookedSlots.includes(time)) {
+        slot.classList.add("booked");
+      } else {
+        slot.addEventListener("click", () => {
+          document.querySelectorAll("#customerTimeSlots .time-slot").forEach((s) => s.classList.remove("selected"));
+          slot.classList.add("selected");
+          customerSelectedTime = time;
+        });
+      }
+
+      if (customerSelectedTime === time && !bookedSlots.includes(time)) {
+        slot.classList.add("selected");
+      }
+
+      container.appendChild(slot);
+    });
+  }
+
+  function editCustomerBooking(backendId) {
+    const booking = currentBookings.find((b) => getBackendId(b) === backendId);
+    if (!booking) return;
+
+    editingCustomerBookingId = backendId;
+    showBookingForm();
+
+    const serviceSelect   = byId("customerServiceSelect");
+    const procedureSelect = byId("customerProcedureSelect");
+    const dateInput       = byId("customerDateInput");
+
+    if (serviceSelect) { serviceSelect.value = booking.service || ""; onCustomerServiceChange(); }
+    if (procedureSelect) procedureSelect.value = booking.procedure || "";
+    if (dateInput) dateInput.value = booking.date || "";
+
+    customerSelectedTime = booking.time || null;
+    updateCustomerTimeSlots();
+
+    const submitBtn = byId("customerSubmitBtn");
+    if (submitBtn) submitBtn.textContent = "Update Appointment";
+  }
+
+  async function deleteCustomerBookingForCustomer(backendId) {
+    const booking = currentBookings.find((b) => getBackendId(b) === backendId);
+    if (!booking || !currentCustomer || booking.customerId !== currentCustomer.id) return;
+    if (!confirm("Are you sure you want to delete this appointment?")) return;
+
+    if (window.dataSdk?.delete) {
+      const result = await window.dataSdk.delete(booking);
+      if (!result.isOk) return showError("Failed to delete booking", "customerErrorMessage");
+    } else {
+      demoDelete(booking);
+    }
+
+    renderCustomerBookings();
+    updateCustomerTimeSlots();
+  }
+
+  async function handleCustomerBookingSubmit(e) {
+    e.preventDefault();
+
+    const submitBtn    = byId("customerSubmitBtn");
+    const originalText = submitBtn ? submitBtn.textContent : "Book Appointment";
+
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Saving..."; }
+
+    if (!customerSelectedTime) {
+      showError("Please select a time slot", "customerErrorMessage");
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = originalText; }
+      return;
+    }
+
+    const base = {
+      service:   safeValue("customerServiceSelect"),
+      procedure: safeValue("customerProcedureSelect") || "",
+      date:      safeValue("customerDateInput"),
+      time:      customerSelectedTime,
+    };
+
+    if (editingCustomerBookingId) {
+      const existing = currentBookings.find((b) => getBackendId(b) === editingCustomerBookingId);
+      if (!existing) {
+        showError("Could not find booking to edit.", "customerErrorMessage");
+      } else {
+        const updatedBooking = { ...existing, ...base, status: "pending" };
+        if (window.dataSdk?.update) {
+          const result = await window.dataSdk.update(updatedBooking);
+          if (!result.isOk) showError("Failed to update appointment.", "customerErrorMessage");
+        } else {
+          demoUpdate(updatedBooking);
+        }
+        showSuccess("Appointment updated! Awaiting admin approval.", "customerSuccessMessage");
+      }
+    } else {
+      const newBooking = {
+        id:          Date.now().toString(),
+        type:        "booking",
+        ...base,
+        status:      "pending",
+        createdAt:   new Date().toISOString(),
+        customerId:  currentCustomer.id,
+        patientName: currentCustomer.name,
+        patientEmail: currentCustomer.email,
+        patientPhone: currentCustomer.phone || "",
+      };
+
+      if (window.dataSdk?.create) {
+        const result = await window.dataSdk.create(newBooking);
+        if (!result.isOk) showError("Failed to book appointment.", "customerErrorMessage");
+      } else {
+        demoCreate(newBooking);
+      }
+
+      await sendBookingConfirmationEmail(newBooking);
+      showSuccess("Appointment booked! Awaiting admin approval.", "customerSuccessMessage");
+    }
+
+    editingCustomerBookingId = null;
+    customerSelectedTime     = null;
+
+    const form = byId("customerBookingFormEl");
+    if (form) form.reset();
+
+    // Go back to dashboard after a short delay so user sees the success message
+    setTimeout(showCustomerDashboard, 1500);
+
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Book Appointment"; }
+  }
+
+  // ---------------------------
+  // Auth
+  // ---------------------------
+  function switchAuthTab(tab) {
+    const login = byId("customerLogin");
+    const reg   = byId("customerRegister");
+    const tabs  = document.querySelectorAll("#customerAuth .nav-tab");
+
+    tabs.forEach((t) => t.classList.remove("active"));
+
+    if (tab === "login") {
+      if (login) login.style.display = "block";
+      if (reg)   reg.style.display   = "none";
+      if (tabs[0]) tabs[0].classList.add("active");
+    } else {
+      if (login) login.style.display = "none";
+      if (reg)   reg.style.display   = "block";
+      if (tabs[1]) tabs[1].classList.add("active");
+    }
+  }
+
+  async function handleCustomerRegister(e) {
+    e.preventDefault();
+    if (!window.dataSdk) loadDemoData();
+
+    const name     = safeValue("registerName").trim();
+    const email    = safeValue("registerEmail").trim().toLowerCase();
+    const phone    = safeValue("registerPhone").trim();
+    const password = safeValue("registerPassword");
+
+    if (!name || !email || !password) {
+      showError("Please fill in name, email, and password.", "customerRegisterError");
+      return;
+    }
+
+    if (currentCustomers.some((c) => (c.email || "").toLowerCase() === email)) {
+      showError("An account with this email already exists.", "customerRegisterError");
+      return;
+    }
+
+    const customer = {
+      id: Date.now().toString(),
+      type: "customer",
+      name, email, phone, password,
+    };
+
+    if (window.dataSdk?.create) {
+      const result = await window.dataSdk.create(customer);
+      if (!result.isOk) {
+        showError("Failed to create account. Please try again.", "customerRegisterError");
+        return;
+      }
+    } else {
+      demoCreate(customer);
+    }
+
+    showSuccess("Account created! You can log in now.", "customerRegisterSuccess");
+    const regForm = byId("customerRegisterForm");
+    if (regForm) regForm.reset();
+    switchAuthTab("login");
+  }
+
+  function handleCustomerLogin(e) {
+    e.preventDefault();
+    if (!window.dataSdk) loadDemoData();
+
+    const email    = safeValue("customerEmail").trim().toLowerCase();
+    const password = safeValue("customerPassword");
+
+    const customer = currentCustomers.find(
+      (c) => (c.email || "").toLowerCase() === email && c.password === password
+    );
+
+    if (!customer) {
+      showError("Invalid email or password.", "customerLoginError");
+      return;
+    }
+
+    setSession({ role: "customer", customerId: customer.id, createdAt: Date.now() });
+    goTo("./customer.html");
+  }
+
+  // ONE handleAdminLogin — no duplicate
+  function handleAdminLogin(e) {
+    e.preventDefault();
+
+    const username = safeValue("adminUsername").trim();
+    const password = safeValue("adminPassword");
+
+    if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+      setSession({ role: "admin", createdAt: Date.now() });
+      goTo("./admin.html");
+      return;
+    }
+
+    const loginError = byId("loginError");
+    if (loginError) {
+      loginError.textContent = "Invalid credentials.";
+      loginError.classList.add("active");
+      setTimeout(() => loginError.classList.remove("active"), 5000);
+    }
+  }
+
+  function logoutToIndex() {
+    clearSession();
+    goTo("./index.html");
+  }
+
+  // ---------------------------
+  // Expose to HTML inline handlers
+  // ---------------------------
+  window.closePromo  = closePromo;
+  window.showPromo   = showPromo;
+
+  window.switchAuthTab = switchAuthTab;
+
+  window.switchTab            = switchTab;
+  window.updateBookingStatus  = updateBookingStatus;
+  window.deleteBooking        = deleteBooking;
+
+  window.showBookingForm        = showBookingForm;
+  window.showCustomerDashboard  = showCustomerDashboard;
+  window.editCustomerBooking               = editCustomerBooking;
+  window.deleteCustomerBookingForCustomer  = deleteCustomerBookingForCustomer;
+
+  window.logout         = logoutToIndex;
+  window.customerLogout = logoutToIndex;
+
+  document.addEventListener("DOMContentLoaded", initializeApp);
 })();
