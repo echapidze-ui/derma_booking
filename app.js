@@ -844,7 +844,6 @@
 
   async function handleCustomerRegister(e) {
     e.preventDefault();
-    if (!window.dataSdk) loadDemoData();
 
     const name     = safeValue("registerName").trim();
     const email    = safeValue("registerEmail").trim().toLowerCase();
@@ -885,7 +884,6 @@
 
   function handleCustomerLogin(e) {
     e.preventDefault();
-    if (!window.dataSdk) loadDemoData();
 
     const email    = safeValue("customerEmail").trim().toLowerCase();
     const password = safeValue("customerPassword");
